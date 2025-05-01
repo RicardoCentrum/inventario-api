@@ -20,12 +20,11 @@ def buscar_producto():
     conn = conectar_db()
     cur = conn.cursor()
     cur.execute("""
-
         SELECT p.id, p.referencia, p.nombre, p.fabricante, l.lote, l.caducidad, l.cantidad
         FROM productos p
         JOIN lotes l ON p.id = l.producto_id
-        WHERE LOWER(p.nombre) LIKE ? OR LOWER(l.lote) LIKE ?
-    """, (f"%{query}%", f"%{query}%"))
+        WHERE LOWER(p.nombre) LIKE ? OR LOWER(l.lote) LIKE ? OR LOWER(p.referencia) LIKE ?
+    """, (f"%{query}%", f"%{query}%", f"%{query}%"))
 
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()
