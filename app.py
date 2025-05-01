@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sqlite3
@@ -14,11 +13,58 @@ def conectar_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def init_db():
+    conn = conectar_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS productos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            referencia TEXT NOT NULL,
+            nombre TEXT NOT NULL,
+            fabricante TEXT NOT NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lotes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER,
+            lote TEXT,
+            caducidad TEXT,
+            cantidad INTEGER,
+            FOREIGN KEY (producto_id) REFERENCES productos (id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS movimientos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lote_id INTEGER,
+            tipo TEXT,
+            cantidad INTEGER,
+            usuario TEXT,
+            fecha TEXT,
+            FOREIGN KEY (lote_id) REFERENCES lotes (id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS qr_escaneados (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT UNIQUE
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
 @app.route("/buscar_producto")
 def buscar_producto():
     query = request.args.get("nombre", "").lower()
     conn = conectar_db()
     cur = conn.cursor()
+
     cur.execute("""
         SELECT p.id, p.referencia, p.nombre, p.fabricante, l.lote, l.caducidad, l.cantidad
         FROM productos p
@@ -40,7 +86,8 @@ def agregar_lote():
     if result:
         producto_id = result["id"]
     else:
-        cur.execute("INSERT INTO productos (nombre, fabricante) VALUES (?, ?)", (data["nombre"], data["fabricante"]))
+        cur.execute("INSERT INTO productos (referencia, nombre, fabricante) VALUES (?, ?, ?)",
+                    (data["referencia"], data["nombre"], data["fabricante"]))
         producto_id = cur.lastrowid
 
     cur.execute("""
@@ -76,9 +123,74 @@ def registrar_movimiento():
     conn.close()
     return jsonify({"status": "ok", "mensaje": "Movimiento registrado"})
 
+@app.route("/registrar_qr", methods=["POST"])
+def registrar_qr():
+    data = request.json
+    contenido_qr = data.get("contenido", "")
+    modo = data.get("modo", "entrada")
+    usuario = data.get("usuario", "Desconocido")
+
+    try:
+        partes = dict(p.strip().split(": ", 1) for p in contenido_qr.split("|"))
+        referencia = partes["ID"]
+        lote = partes["Lote"]
+        ts = partes["TS"]
+
+    except Exception:
+        return jsonify({"status": "error", "mensaje": "Imposible leer código QR"}), 400
+
+    conn = conectar_db()
+    cur = conn.cursor()
+
+    cur.execute("SELECT 1 FROM qr_escaneados WHERE timestamp = ?", (ts,))
+    if cur.fetchone():
+        cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
+        nombre = cur.fetchone()
+        conn.close()
+        return jsonify({
+            "status": "repetido",
+            "mensaje": "Producto escaneado anteriormente",
+            "referencia": referencia,
+            "nombre": nombre["nombre"] if nombre else "Desconocido"
+        })
+
+    cur.execute("""
+        SELECT p.id, l.id, l.cantidad FROM productos p
+        JOIN lotes l ON p.id = l.producto_id
+        WHERE p.referencia = ? AND l.lote = ?
+    """, (referencia, lote))
+    fila = cur.fetchone()
+    if not fila:
+        conn.close()
+        return jsonify({"status": "error", "mensaje": "Producto o lote no encontrado"}), 404
+
+    producto_id, lote_id, cantidad_actual = fila
+    nueva_cantidad = cantidad_actual + 1 if modo == "entrada" else max(0, cantidad_actual - 1)
+
+    cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (nueva_cantidad, lote_id))
+    cur.execute("""
+        INSERT INTO movimientos (lote_id, tipo, cantidad, usuario, fecha)
+        VALUES (?, ?, ?, ?, ?)
+    """, (lote_id, modo, 1, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
+    cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
+    conn.commit()
+
+    cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
+    nombre = cur.fetchone()
+    conn.close()
+
+    return jsonify({
+        "status": "ok",
+        "mensaje": "Nuevo producto agregado",
+        "referencia": referencia,
+        "nombre": nombre["nombre"] if nombre else "Desconocido"
+    })
+
 @app.route("/")
 def home():
     return "API de Inventario en línea - Flask + SQLite + Render"
 
 if __name__ == "__main__":
+    init_db()
     app.run(host="0.0.0.0", port=10000)
