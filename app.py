@@ -149,7 +149,7 @@ def registrar_qr():
         import string
         contenido_qr = ''.join(c for c in contenido_qr if c in string.printable and c not in '\r\n\t')
         contenido_qr = contenido_qr.strip()
-        partes = dict(p.strip().split(":", 1) for p in contenido_qr.split("|"))
+        partes = dict(p.strip().split(": ", 1) for p in contenido_qr.split("|"))
         referencia = partes["ID"]
         lote = partes["Lote"]
         ts = partes["TS"]
