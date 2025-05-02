@@ -143,7 +143,9 @@ def registrar_qr():
     cur = conn.cursor()
 
     cur.execute("SELECT 1 FROM qr_escaneados WHERE timestamp = ?", (ts,))
-    if cur.fetchone():
+    ya_registrado = cur.fetchone()
+
+    if modo == "entrada" and ya_registrado:
         cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
         nombre = cur.fetchone()
         conn.close()
@@ -153,6 +155,9 @@ def registrar_qr():
             "referencia": referencia,
             "nombre": nombre["nombre"] if nombre else "Desconocido"
         })
+    # Solo registrar el timestamp si es una entrada nueva
+    if modo == "entrada" and not ya_registrado:
+        cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
 
     cur.execute("""
         SELECT p.id, l.id, l.cantidad FROM productos p
