@@ -159,17 +159,53 @@ def registrar_qr():
     if modo == "entrada" and not ya_registrado:
         cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
 
+    cur.execute("SELECT id FROM productos WHERE referencia = ?", (referencia,))
+    producto = cur.fetchone()
+    if not producto:
+        conn.close()
+        return jsonify({"status": "error", "mensaje": "Referencia no encontrada"}), 404
+
+    producto_id = producto["id"]
+
     cur.execute("""
-        SELECT p.id, l.id, l.cantidad FROM productos p
-        JOIN lotes l ON p.id = l.producto_id
-        WHERE p.referencia = ? AND l.lote = ?
-    """, (referencia, lote))
-    fila = cur.fetchone()
-    if not fila:
+        SELECT id, cantidad FROM lotes
+        WHERE producto_id = ? AND lote = ?
+    """, (producto_id, lote))
+    lote_info = cur.fetchone()
+
+    if not lote_info:
+        if modo == "salida":
+            conn.close()
+            return jsonify({"status": "error", "mensaje": "No puedes retirar un lote que no existe"}), 400
+        # Crear nuevo lote si es entrada
+        cur.execute("INSERT INTO lotes (producto_id, lote, caducidad, cantidad) VALUES (?, ?, ?, ?)",
+                    (producto_id, lote, datetime.now().strftime("%Y-%m-%d"), 1))
+        lote_id = cur.lastrowid
+        cantidad_actual = 0
+    else:
+        lote_id = lote_info["id"]
+        cantidad_actual = lote_info["cantidad"]
+        if modo == "entrada":
+            cantidad_actual += 1
+        else:
+            cantidad_actual = max(0, cantidad_actual - 1)
+        cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (cantidad_actual, lote_id))
+
+    if not lote_info:
         conn.close()
         return jsonify({"status": "error", "mensaje": "Producto o lote no encontrado"}), 404
 
-    producto_id, lote_id, cantidad_actual = fila
+    producto_id = producto["id"]
+
+    cur.execute("SELECT id, cantidad FROM lotes WHERE producto_id = ? AND lote = ?", (producto_id, lote))
+    lote_info = cur.fetchone()
+
+    if not lote_info:
+        ...
+    else:
+        lote_id = lote_info["id"]
+        cantidad_actual = lote_info["cantidad"]
+
     nueva_cantidad = cantidad_actual + 1 if modo == "entrada" else max(0, cantidad_actual - 1)
 
     cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (nueva_cantidad, lote_id))
