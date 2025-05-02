@@ -191,10 +191,6 @@ def registrar_qr():
 def home():
     return "API de Inventario en línea - Flask + SQLite + Render"
 
-if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=10000)
-    
 @app.route("/detalle_producto")
 def detalle_producto():
     referencia = request.args.get("referencia")
@@ -235,3 +231,7 @@ def detalle_producto():
         "lotes": lotes,
         "movimientos": movimientos
     })
+
+if __name__ == "__main__":
+    init_db()
+    app.run(host="0.0.0.0", port=10000)
