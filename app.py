@@ -14,50 +14,54 @@ def conectar_db():
     return conn
 
 def init_db():
-    conn = conectar_db()
-    cur = conn.cursor()
+    conn = None
+    try:
+        conn = conectar_db()
+        cur = conn.cursor()
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS productos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            referencia TEXT NOT NULL,
-            nombre TEXT NOT NULL,
-            fabricante TEXT NOT NULL
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS productos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                referencia TEXT NOT NULL,
+                nombre TEXT NOT NULL,
+                fabricante TEXT NOT NULL
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS lotes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            producto_id INTEGER,
-            lote TEXT,
-            caducidad TEXT,
-            cantidad INTEGER,
-            FOREIGN KEY (producto_id) REFERENCES productos (id)
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS lotes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                producto_id INTEGER,
+                lote TEXT,
+                caducidad TEXT,
+                cantidad INTEGER,
+                FOREIGN KEY (producto_id) REFERENCES productos (id)
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS movimientos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lote_id INTEGER,
-            tipo TEXT,
-            cantidad INTEGER,
-            usuario TEXT,
-            fecha TEXT,
-            FOREIGN KEY (lote_id) REFERENCES lotes (id)
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS movimientos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lote_id INTEGER,
+                tipo TEXT,
+                cantidad INTEGER,
+                usuario TEXT,
+                fecha TEXT,
+                FOREIGN KEY (lote_id) REFERENCES lotes (id)
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS qr_escaneados (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT UNIQUE
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS qr_escaneados (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT UNIQUE
+            )
+        """)
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+    finally:
+        if conn:
+            conn.close()
 
 @app.route("/buscar_producto")
 def buscar_producto():
@@ -214,8 +218,8 @@ def registrar_qr():
         VALUES (?, ?, ?, ?, ?)
     """, (lote_id, modo, 1, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
-    cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
-    conn.commit()
+    #cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
+    #conn.commit()
 
     cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
     nombre = cur.fetchone()
