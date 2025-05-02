@@ -198,7 +198,8 @@ def registrar_qr():
 
         # Registrar el nuevo timestamp
         cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
-
+    except Exception as e:
+        print("Error insertando timestamp:", e)
         # Buscar producto
         cur.execute("SELECT id FROM productos WHERE referencia = ?", (referencia,))
         producto = cur.fetchone()
@@ -241,23 +242,6 @@ def registrar_qr():
             "status": "ok",
             "color": "verde" if modo == "entrada" else "rojo",
             "mensaje": "Nuevo producto agregado" if modo == "entrada" else "Producto retirado exitosamente",
-            "referencia": referencia,
-            "nombre": nombre["nombre"] if nombre else "Desconocido"
-        })
-
-    finally:
-        conn.close()
-
-#cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
-#conn.commit()
-
-        cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
-        nombre = cur.fetchone()
-        conn.close()
-
-        return jsonify({
-            "status": "ok",
-            "mensaje": "Nuevo producto agregado",
             "referencia": referencia,
             "nombre": nombre["nombre"] if nombre else "Desconocido"
         })
