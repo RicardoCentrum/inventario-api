@@ -139,67 +139,67 @@ def registrar_qr():
         referencia = partes["ID"]
         lote = partes["Lote"]
         ts = partes["TS"]
-
     except Exception:
         return jsonify({"status": "error", "mensaje": "Imposible leer código QR"}), 400
 
     conn = conectar_db()
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    cur.execute("SELECT 1 FROM qr_escaneados WHERE timestamp = ?", (ts,))
-    ya_registrado = cur.fetchone()
+        cur.execute("SELECT 1 FROM qr_escaneados WHERE timestamp = ?", (ts,))
+        ya_registrado = cur.fetchone()
 
-    if modo == "entrada" and ya_registrado:
+        if modo == "entrada" and ya_registrado:
+            cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
+            nombre = cur.fetchone()
+            return jsonify({
+                "status": "repetido",
+                "mensaje": "Producto escaneado anteriormente",
+                "referencia": referencia,
+                "nombre": nombre["nombre"] if nombre else "Desconocido"
+            })
+
+        if modo == "entrada" and not ya_registrado:
+            cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
+
+        cur.execute("SELECT id FROM productos WHERE referencia = ?", (referencia,))
+        producto = cur.fetchone()
+        if not producto:
+            return jsonify({"status": "error", "mensaje": "Referencia no encontrada"}), 404
+
+        producto_id = producto["id"]
+
+        cur.execute("SELECT id, cantidad FROM lotes WHERE producto_id = ? AND lote = ?", (producto_id, lote))
+        lote_info = cur.fetchone()
+
+        if not lote_info:
+            if modo == "salida":
+                return jsonify({"status": "error", "mensaje": "No puedes retirar un lote que no existe"}), 400
+            cur.execute("INSERT INTO lotes (producto_id, lote, caducidad, cantidad) VALUES (?, ?, ?, ?)",
+                        (producto_id, lote, datetime.now().strftime("%Y-%m-%d"), 1))
+            lote_id = cur.lastrowid
+        else:
+            lote_id = lote_info["id"]
+            cantidad_actual = lote_info["cantidad"]
+            nueva_cantidad = cantidad_actual + 1 if modo == "entrada" else max(0, cantidad_actual - 1)
+            cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (nueva_cantidad, lote_id))
+
+        cur.execute("INSERT INTO movimientos (lote_id, tipo, cantidad, usuario, fecha) VALUES (?, ?, ?, ?, ?)",
+                    (lote_id, modo, 1, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
+        conn.commit()
+
         cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
         nombre = cur.fetchone()
-        conn.close()
         return jsonify({
-            "status": "repetido",
-            "mensaje": "Producto escaneado anteriormente",
+            "status": "ok",
+            "mensaje": "Nuevo producto agregado" if modo == "entrada" else "Producto retirado",
             "referencia": referencia,
             "nombre": nombre["nombre"] if nombre else "Desconocido"
         })
-    # Solo registrar el timestamp si es una entrada nueva
-    if modo == "entrada" and not ya_registrado:
-        cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
 
-    cur.execute("SELECT id FROM productos WHERE referencia = ?", (referencia,))
-    producto = cur.fetchone()
-    if not producto:
+    finally:
         conn.close()
-        return jsonify({"status": "error", "mensaje": "Referencia no encontrada"}), 404
-
-    producto_id = producto["id"]
-
-    cur.execute("""
-        SELECT id, cantidad FROM lotes
-        WHERE producto_id = ? AND lote = ?
-    """, (producto_id, lote))
-    lote_info = cur.fetchone()
-
-    if not lote_info:
-        if modo == "salida":
-            conn.close()
-            return jsonify({"status": "error", "mensaje": "No puedes retirar un lote que no existe"}), 400
-        # Crear nuevo lote si es entrada
-        cur.execute("INSERT INTO lotes (producto_id, lote, caducidad, cantidad) VALUES (?, ?, ?, ?)",
-                    (producto_id, lote, datetime.now().strftime("%Y-%m-%d"), 1))
-        lote_id = cur.lastrowid
-        cantidad_actual = 0
-    else:
-        lote_id = lote_info["id"]
-        cantidad_actual = lote_info["cantidad"]
-        if modo == "entrada":
-            cantidad_actual += 1
-        else:
-            cantidad_actual = max(0, cantidad_actual - 1)
-        cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (cantidad_actual, lote_id))
-
-    cur.execute("""
-        INSERT INTO movimientos (lote_id, tipo, cantidad, usuario, fecha)
-        VALUES (?, ?, ?, ?, ?)
-    """, (lote_id, modo, 1, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-
     #cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
     #conn.commit()
 
