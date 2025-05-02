@@ -149,15 +149,29 @@ def registrar_qr():
         cur.execute("SELECT 1 FROM qr_escaneados WHERE timestamp = ?", (ts,))
         ya_registrado = cur.fetchone()
 
-        if modo == "entrada" and ya_registrado:
+        if ya_registrado:
             cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
             nombre = cur.fetchone()
-            return jsonify({
-                "status": "repetido",
-                "mensaje": "Producto escaneado anteriormente",
-                "referencia": referencia,
-                "nombre": nombre["nombre"] if nombre else "Desconocido"
-            })
+
+            if modo == "entrada":
+                return jsonify({
+                    "status": "repetido",
+                    "color": "azul",
+                    "mensaje": "Producto escaneado anteriormente",
+                    "referencia": referencia,
+                    "nombre": nombre["nombre"] if nombre else "Desconocido"
+                })
+            else:
+                # modo salida
+                cur.execute("SELECT usuario FROM movimientos WHERE tipo = 'salida' AND lote_id IN (SELECT id FROM lotes WHERE producto_id = (SELECT id FROM productos WHERE referencia = ?)) ORDER BY fecha DESC LIMIT 1", (referencia,))
+                usuario_prev = cur.fetchone()
+                return jsonify({
+                    "status": "repetido",
+                    "color": "dorado",
+                    "mensaje": f"Producto ya fue retirado por {usuario_prev['usuario'] if usuario_prev else 'otro usuario'}",
+                    "referencia": referencia,
+                    "nombre": nombre["nombre"] if nombre else "Desconocido"
+                })
 
         if modo == "entrada" and not ya_registrado:
             cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
@@ -193,7 +207,8 @@ def registrar_qr():
         nombre = cur.fetchone()
         return jsonify({
             "status": "ok",
-            "mensaje": "Nuevo producto agregado" if modo == "entrada" else "Producto retirado",
+            "color": "verde" if modo == "entrada" else "rojo",
+            "mensaje": "Nuevo producto agregado" if modo == "entrada" else "Producto retirado exitosamente",
             "referencia": referencia,
             "nombre": nombre["nombre"] if nombre else "Desconocido"
         })
