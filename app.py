@@ -194,3 +194,44 @@ def home():
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=10000)
+    
+@app.route("/detalle_producto")
+def detalle_producto():
+    referencia = request.args.get("referencia")
+    conn = conectar_db()
+    cur = conn.cursor()
+
+    # Buscar producto
+    cur.execute("SELECT id, nombre, fabricante FROM productos WHERE referencia = ?", (referencia,))
+    prod = cur.fetchone()
+    if not prod:
+        return jsonify({"error": "Producto no encontrado"}), 404
+
+    producto_id = prod["id"]
+
+    # Buscar lotes
+    cur.execute("""
+        SELECT lote, caducidad, cantidad
+        FROM lotes
+        WHERE producto_id = ?
+    """, (producto_id,))
+    lotes = [dict(row) for row in cur.fetchall()]
+
+    # Buscar movimientos
+    cur.execute("""
+        SELECT m.usuario, m.tipo, m.fecha, l.lote, m.cantidad
+        FROM movimientos m
+        JOIN lotes l ON m.lote_id = l.id
+        WHERE l.producto_id = ?
+        ORDER BY m.fecha DESC
+    """, (producto_id,))
+    movimientos = [dict(row) for row in cur.fetchall()]
+
+    conn.close()
+    return jsonify({
+        "referencia": referencia,
+        "nombre": prod["nombre"],
+        "fabricante": prod["fabricante"],
+        "lotes": lotes,
+        "movimientos": movimientos
+    })
