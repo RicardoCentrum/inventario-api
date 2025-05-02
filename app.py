@@ -173,8 +173,9 @@ def registrar_qr():
                     "nombre": nombre["nombre"] if nombre else "Desconocido"
                 })
 
-        if modo == "entrada" and not ya_registrado:
+        if not ya_registrado:
             cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
+
 
         cur.execute("SELECT id FROM productos WHERE referencia = ?", (referencia,))
         producto = cur.fetchone()
