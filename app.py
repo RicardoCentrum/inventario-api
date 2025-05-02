@@ -135,7 +135,10 @@ def registrar_qr():
     usuario = data.get("usuario", "Desconocido")
 
     try:
-        partes = dict(p.strip().split(": ", 1) for p in contenido_qr.split("|"))
+        import string
+        contenido_qr = ''.join(c for c in contenido_qr if c in string.printable and c not in '\r\n\t')
+        contenido_qr = contenido_qr.strip()
+        partes = dict(p.strip().split(":", 1) for p in contenido_qr.split("|"))
         referencia = partes["ID"]
         lote = partes["Lote"]
         ts = partes["TS"]
@@ -146,50 +149,37 @@ def registrar_qr():
     try:
         cur = conn.cursor()
 
+        # Revisar si el timestamp ya fue registrado
         cur.execute("SELECT 1 FROM qr_escaneados WHERE timestamp = ?", (ts,))
         ya_registrado = cur.fetchone()
-
         if ya_registrado:
             cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
             nombre = cur.fetchone()
+            return jsonify({
+                "status": "repetido",
+                "color": "azul",
+                "mensaje": "Producto escaneado anteriormente",
+                "referencia": referencia,
+                "nombre": nombre["nombre"] if nombre else "Desconocido"
+            })
 
-            if modo == "entrada":
-                return jsonify({
-                    "status": "repetido",
-                    "color": "azul",
-                    "mensaje": "Producto escaneado anteriormente",
-                    "referencia": referencia,
-                    "nombre": nombre["nombre"] if nombre else "Desconocido"
-                })
-            else:
-                # modo salida
-                cur.execute("SELECT usuario FROM movimientos WHERE tipo = 'salida' AND lote_id IN (SELECT id FROM lotes WHERE producto_id = (SELECT id FROM productos WHERE referencia = ?)) ORDER BY fecha DESC LIMIT 1", (referencia,))
-                usuario_prev = cur.fetchone()
-                return jsonify({
-                    "status": "repetido",
-                    "color": "dorado",
-                    "mensaje": f"Producto ya fue retirado por {usuario_prev['usuario'] if usuario_prev else 'otro usuario'}",
-                    "referencia": referencia,
-                    "nombre": nombre["nombre"] if nombre else "Desconocido"
-                })
+        # Registrar el nuevo timestamp
+        cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
 
-        if not ya_registrado:
-            cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
-
-
+        # Buscar producto
         cur.execute("SELECT id FROM productos WHERE referencia = ?", (referencia,))
         producto = cur.fetchone()
         if not producto:
             return jsonify({"status": "error", "mensaje": "Referencia no encontrada"}), 404
-
         producto_id = producto["id"]
 
+        # Buscar lote
         cur.execute("SELECT id, cantidad FROM lotes WHERE producto_id = ? AND lote = ?", (producto_id, lote))
         lote_info = cur.fetchone()
-
         if not lote_info:
             if modo == "salida":
                 return jsonify({"status": "error", "mensaje": "No puedes retirar un lote que no existe"}), 400
+            # Crear nuevo lote si es entrada
             cur.execute("INSERT INTO lotes (producto_id, lote, caducidad, cantidad) VALUES (?, ?, ?, ?)",
                         (producto_id, lote, datetime.now().strftime("%Y-%m-%d"), 1))
             lote_id = cur.lastrowid
@@ -199,11 +189,19 @@ def registrar_qr():
             nueva_cantidad = cantidad_actual + 1 if modo == "entrada" else max(0, cantidad_actual - 1)
             cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (nueva_cantidad, lote_id))
 
+        # Registrar movimiento
         cur.execute("INSERT INTO movimientos (lote_id, tipo, cantidad, usuario, fecha) VALUES (?, ?, ?, ?, ?)",
                     (lote_id, modo, 1, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
+        # Registrar escaneo en el historial
+        cur.execute("""
+            INSERT INTO qr_log (timestamp, referencia, lote, tipo, usuario, fecha)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (ts, referencia, lote, modo, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
         conn.commit()
 
+        # Confirmar éxito
         cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
         nombre = cur.fetchone()
         return jsonify({
@@ -216,6 +214,7 @@ def registrar_qr():
 
     finally:
         conn.close()
+
     #cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
     #conn.commit()
 
