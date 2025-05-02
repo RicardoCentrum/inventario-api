@@ -18,6 +18,17 @@ def init_db():
     try:
         conn = conectar_db()
         cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS qr_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT,
+                referencia TEXT,
+                lote TEXT,
+                tipo TEXT,
+                usuario TEXT,
+                fecha TEXT
+            )
+        """)
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS productos (
