@@ -195,24 +195,6 @@ def registrar_qr():
             cantidad_actual = max(0, cantidad_actual - 1)
         cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (cantidad_actual, lote_id))
 
-    if not lote_info:
-        conn.close()
-        return jsonify({"status": "error", "mensaje": "Producto o lote no encontrado"}), 404
-
-    producto_id = producto["id"]
-
-    cur.execute("SELECT id, cantidad FROM lotes WHERE producto_id = ? AND lote = ?", (producto_id, lote))
-    lote_info = cur.fetchone()
-
-    if not lote_info:
-        ...
-    else:
-        lote_id = lote_info["id"]
-        cantidad_actual = lote_info["cantidad"]
-
-    nueva_cantidad = cantidad_actual + 1 if modo == "entrada" else max(0, cantidad_actual - 1)
-
-    cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (nueva_cantidad, lote_id))
     cur.execute("""
         INSERT INTO movimientos (lote_id, tipo, cantidad, usuario, fecha)
         VALUES (?, ?, ?, ?, ?)
