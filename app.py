@@ -147,10 +147,10 @@ def registrar_qr():
 
     try:
         import string
+        import re
         contenido_qr = ''.join(c for c in contenido_qr if c in string.printable and c not in '\r\n\t')
         contenido_qr = contenido_qr.strip()
         print(f"[DEBUG] QR recibido: {contenido_qr}")
-        import re
         partes = dict(re.split(r":\s*", p.strip(), maxsplit=1) for p in contenido_qr.split("|"))
         referencia = partes["ID"]
         lote = partes["Lote"]
@@ -159,12 +159,13 @@ def registrar_qr():
         return jsonify({"status": "error", "mensaje": "Imposible leer código QR"}), 400
 
     conn = conectar_db()
-    try:
-        cur = conn.cursor()
+    cur = conn.cursor()
 
-        # Revisar si el timestamp ya fue registrado
+    try:
+        # Verificar si el timestamp ya ha sido registrado
         cur.execute("SELECT 1 FROM qr_escaneados WHERE timestamp = ?", (ts,))
         ya_registrado = cur.fetchone()
+
         if ya_registrado:
             cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
             nombre = cur.fetchone()
@@ -198,8 +199,7 @@ def registrar_qr():
 
         # Registrar el nuevo timestamp
         cur.execute("INSERT INTO qr_escaneados (timestamp) VALUES (?)", (ts,))
-    except Exception as e:
-        print("Error insertando timestamp:", e)
+
         # Buscar producto
         cur.execute("SELECT id FROM productos WHERE referencia = ?", (referencia,))
         producto = cur.fetchone()
@@ -210,6 +210,7 @@ def registrar_qr():
         # Buscar lote
         cur.execute("SELECT id, cantidad FROM lotes WHERE producto_id = ? AND lote = ?", (producto_id, lote))
         lote_info = cur.fetchone()
+
         if not lote_info:
             if modo == "salida":
                 return jsonify({"status": "error", "mensaje": "No puedes retirar un lote que no existe"}), 400
@@ -224,10 +225,12 @@ def registrar_qr():
             cur.execute("UPDATE lotes SET cantidad = ? WHERE id = ?", (nueva_cantidad, lote_id))
 
         # Registrar movimiento
-        cur.execute("INSERT INTO movimientos (lote_id, tipo, cantidad, usuario, fecha) VALUES (?, ?, ?, ?, ?)",
-                    (lote_id, modo, 1, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        cur.execute("""
+            INSERT INTO movimientos (lote_id, tipo, cantidad, usuario, fecha)
+            VALUES (?, ?, ?, ?, ?)
+        """, (lote_id, modo, 1, usuario, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
-        # Registrar escaneo en el historial
+        # Registrar en log
         cur.execute("""
             INSERT INTO qr_log (timestamp, referencia, lote, tipo, usuario, fecha)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -235,9 +238,10 @@ def registrar_qr():
 
         conn.commit()
 
-        # Confirmar éxito
+        # Obtener nombre
         cur.execute("SELECT nombre FROM productos WHERE referencia = ?", (referencia,))
         nombre = cur.fetchone()
+
         return jsonify({
             "status": "ok",
             "color": "verde" if modo == "entrada" else "rojo",
@@ -245,6 +249,13 @@ def registrar_qr():
             "referencia": referencia,
             "nombre": nombre["nombre"] if nombre else "Desconocido"
         })
+
+    except Exception as e:
+        print("[ERROR registrar_qr]:", e)
+        return jsonify({"status": "error", "mensaje": "Error interno del servidor"}), 500
+    finally:
+        conn.close()
+
 
 @app.route("/")
 def home():
