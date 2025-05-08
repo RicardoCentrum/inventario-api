@@ -44,15 +44,21 @@ def registrar_qr():
     resultados = []
     fecha_actual = int(datetime.datetime.now().timestamp() * 1000)
 
+    print("=== REGISTROS RECIBIDOS ===")
+    print(registros)
+
     for r in registros:
-        ref = r.get("referencia")
-        lote = r.get("lote")
-        modo = r.get("modo")
-        usuario = r.get("usuario")
-        ts = r.get("timestamp") or str(fecha_actual)
+        ref = r.get("referencia", "").strip()
+        lote = r.get("lote", "").strip()
+        modo = r.get("modo", "").strip()
+        usuario = r.get("usuario", "").strip()
+        ts = str(r.get("timestamp") or fecha_actual).strip()
+
+        print(f"[INFO] Procesando: ref='{ref}', lote='{lote}', modo='{modo}', usuario='{usuario}', ts='{ts}'")
 
         if not ref or not lote or not usuario or not modo:
-            resultados.append({"status": "error", "mensaje": "Datos incompletos"})
+            print("[ERROR] Faltan datos obligatorios.")
+            resultados.append({"status": "error", "mensaje": "Datos incompletos: referencia, lote, usuario o modo faltan."})
             continue
 
         ts_entry = timestamp_existe(ts)
@@ -89,9 +95,11 @@ def registrar_qr():
                 })
 
         else:
-            resultados.append({"status": "error", "mensaje": "Modo inválido"})
+            print(f"[ERROR] Modo inválido recibido: '{modo}'")
+            resultados.append({"status": "error", "mensaje": f"Modo inválido: {modo}"})
 
     return jsonify({"resultados": resultados})
+
 
 # --- Búsqueda por referencia ---
 @app.route("/buscar_referencia", methods=["GET"])
