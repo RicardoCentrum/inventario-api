@@ -54,10 +54,12 @@ def registrar_qr():
         usuario = (r.get("usuario") or "").strip()
         ts = str(r.get("timestamp") or fecha_actual).strip()
 
-        print(f"[DEBUG] Recibido → ref='{ref}', lote='{lote}', modo='{modo}', usuario='{usuario}', ts='{ts}'")
+        print(f"[DEBUG] REF: '{ref}' | LOTE: '{lote}' | MODO: '{modo}' | USUARIO: '{usuario}' | TS: '{ts}'")
 
-        if not all([ref, lote, modo, usuario]):
-            resultados.append({"status": "error", "mensaje": f"Datos incompletos: ref='{ref}', lote='{lote}', modo='{modo}', usuario='{usuario}'"})
+        if not ref or not lote or not usuario or not modo:
+            msg = f"Datos incompletos: ref='{ref}', lote='{lote}', modo='{modo}', usuario='{usuario}'"
+            print("[ERROR]", msg)
+            resultados.append({"status": "error", "mensaje": msg})
             continue
 
         ts_entry = timestamp_existe(ts)
