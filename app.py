@@ -48,17 +48,16 @@ def registrar_qr():
     print(registros)
 
     for r in registros:
-        ref = r.get("referencia", "").strip()
-        lote = r.get("lote", "").strip()
-        modo = r.get("modo", "").strip()
-        usuario = r.get("usuario", "").strip()
+        ref = (r.get("referencia") or "").strip()
+        lote = (r.get("lote") or "").strip()
+        modo = (r.get("modo") or "").strip()
+        usuario = (r.get("usuario") or "").strip()
         ts = str(r.get("timestamp") or fecha_actual).strip()
 
-        print(f"[INFO] Procesando: ref='{ref}', lote='{lote}', modo='{modo}', usuario='{usuario}', ts='{ts}'")
+        print(f"[DEBUG] Recibido → ref='{ref}', lote='{lote}', modo='{modo}', usuario='{usuario}', ts='{ts}'")
 
-        if not ref or not lote or not usuario or not modo:
-            print("[ERROR] Faltan datos obligatorios.")
-            resultados.append({"status": "error", "mensaje": "Datos incompletos: referencia, lote, usuario o modo faltan."})
+        if not all([ref, lote, modo, usuario]):
+            resultados.append({"status": "error", "mensaje": f"Datos incompletos: ref='{ref}', lote='{lote}', modo='{modo}', usuario='{usuario}'"})
             continue
 
         ts_entry = timestamp_existe(ts)
